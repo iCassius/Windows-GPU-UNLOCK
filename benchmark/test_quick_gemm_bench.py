@@ -1,49 +1,44 @@
-"""Unit tests for quick_gemm_bench.py."""
-
+"""GPU-free tests for input construction and explicit ctypes declarations."""
+import ctypes
 import unittest
-from unittest.mock import MagicMock, patch
-import sys
-from pathlib import Path
+from unittest.mock import MagicMock
 
-# Add benchmark directory to path
-BENCHMARK_DIR = Path(__file__).resolve().parent
-if str(BENCHMARK_DIR) not in sys.path:
-    sys.path.insert(0, str(BENCHMARK_DIR))
-
-import quick_gemm_bench
+import quick_gemm_bench as bench
 
 
-class TestQuickGemmBench(unittest.TestCase):
+class QuickGemmContractTests(unittest.TestCase):
+    def test_inputs_are_deterministic_finite_fp16_and_nonconstant(self):
+        a0, b0, base_a0, base_b0 = bench.build_inputs(64, seed=10)
+        a1, b1, _, _ = bench.build_inputs(64, seed=10)
+        a2, b2, _, _ = bench.build_inputs(64, seed=11)
+        self.assertEqual(a0, a1)
+        self.assertEqual(b0, b1)
+        self.assertNotEqual(a0, a2)
+        self.assertNotEqual(b0, b2)
+        self.assertEqual(len(a0), 64 * 64 * 2)
+        self.assertEqual(len(b0), 64 * 64 * 2)
+        self.assertGreater(len(set(a0[i:i + 2] for i in range(0, len(a0), 2))), 2)
+        self.assertTrue(all(-1.0 <= value <= 1.0 for row in base_a0 for value in row))
+        self.assertTrue(all(-1.0 <= value <= 1.0 for row in base_b0 for value in row))
 
-    def test_find_cuda_libraries_returns_tuple(self):
-        cuda, cublas = quick_gemm_bench.find_cuda_libraries()
-        self.assertIsInstance((cuda, cublas), tuple)
+    def test_periodic_cpu_reference_matches_direct_float64_sum(self):
+        _, _, a, b = bench.build_inputs(64, seed=42)
+        actual = bench.sampled_reference(a, b, 128, 7, 19)
+        direct = 2 * sum(a[7][k] * b[k][19] for k in range(64))
+        self.assertAlmostEqual(actual, direct, places=12)
 
-    @patch("quick_gemm_bench.ctypes")
-    @patch("quick_gemm_bench.time")
-    def test_run_gemm_benchmark_mocked(self, mock_time, mock_ctypes):
-        mock_cuda = MagicMock()
-        mock_cublas = MagicMock()
-
-        # Set up mock returns
-        mock_cuda.cuDeviceGet.return_value = 0
-        mock_cuda.cuCtxCreate_v2.return_value = 0
-        mock_cublas.cublasCreate_v2.return_value = 0
-
-        # Simulate time duration
-        mock_time.time.side_effect = [100.0, 101.0]
-
-        res = quick_gemm_bench.run_gemm_benchmark(
-            mock_cuda, mock_cublas, device_index=0, matrix_size=1024, runs=5
-        )
-
-        self.assertEqual(res["device_index"], 0)
-        self.assertEqual(res["matrix_size"], 1024)
-        self.assertGreater(res["tflops"], 0.0)
-        mock_cuda.cuMemFree_v2.assert_called()
-        mock_cublas.cublasDestroy_v2.assert_called()
-        mock_cuda.cuCtxDestroy_v2.assert_called()
+    def test_abi_declarations_include_pointer_sized_arguments(self):
+        cuda, cublas = MagicMock(), MagicMock()
+        bench.configure_abis(cuda, cublas)
+        self.assertIs(cuda.cuMemAlloc_v2.argtypes[1], ctypes.c_size_t)
+        self.assertIs(cuda.cuMemAlloc_v2.argtypes[0]._type_, ctypes.c_uint64)
+        self.assertIs(cuda.cuMemcpyHtoD_v2.argtypes[0], ctypes.c_uint64)
+        self.assertIs(cuda.cuMemcpyHtoD_v2.argtypes[2], ctypes.c_size_t)
+        self.assertIs(cuda.cuEventElapsedTime.restype, ctypes.c_int)
+        self.assertEqual(len(cublas.cublasGemmEx.argtypes), 19)
+        self.assertIs(cublas.cublasGemmEx.restype, ctypes.c_int)
+        self.assertEqual(bench.CUBLAS_GEMM_DEFAULT_TENSOR_OP, 99)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
