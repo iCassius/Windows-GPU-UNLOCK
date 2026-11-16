@@ -48,4 +48,4 @@ After enabling GSP mode and booting through the unlock EFI, verify actual comput
 ```powershell
 python .\benchmark\quick_gemm_bench.py
 ```
-This runs a 4096 GEMM matrix multiplication directly through system cuBLAS in ~1.5 seconds, reporting median throughput (TFLOPS) without requiring CUDA SDK compilation.
+This experimental runner uses CUDA events and initialized, deterministic FP16 inputs; it checks eight sampled FP32 outputs against a CPU float64 reference. It requires a compatible cuBLAS library as well as the NVIDIA driver. CUDA/cuBLAS failures, sampled-output mismatches, or cleanup failures refuse a result, and any device failure produces a nonzero exit status. The sample check is not a full numerical certification or a matched before/after unlock benchmark. Native Windows/CUDA execution still needs validation before relying on its measurements.
