@@ -6,8 +6,10 @@
   all detected NVIDIA display adapters, eliminating driver Code 43 on Windows
   when running pre-OS unlock configurations.
 - Add `benchmark/quick_gemm_bench.py` and `benchmark/test_quick_gemm_bench.py`
-  to measure 4096 GEMM throughput via ctypes directly calling system cuBLAS,
-  enabling instant TFLOPS verification without requiring MSVC/nvcc compiler tools.
+  for an experimental, compiler-free cuBLAS diagnostic with explicit ctypes
+  signatures, checked CUDA/cuBLAS calls, deterministic initialized inputs,
+  sampled numerical checks, and nonzero failure propagation. The result is not
+  matched unlock evidence or full numerical certification.
 - Add `docs/GSP-MODE.en.md` explaining CPU-RM vs GSP-RM mechanisms on Windows.
 
 ## Unreleased — preserve captured state in host qualification fixtures
